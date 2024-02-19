@@ -30,42 +30,47 @@ class World2D:
         # switch fields, older field is in [...]1
         self.velocity0, self.velocity1 = self.velocity1, self.velocity0
         self.density0, self.density1 = self.density1, self.density0
-        # velocity steps
+        # velocity steps (Vstep)
         for i in range(2):
             self.add_force_velocity(self.velocity0[i], self.force, dt)
         for i in range(2):
             self.transport_velocity(self.velocity0[i], self.velocity1[i], self.velocity0, dt)
         for i in range(2):
             self.diffuse_velocity(self.velocity0[i], self.velocity1[i], self.viscosity, dt)
+        self.project_velocity(self.velocity0, self.velocity1, dt)
 
-        # scalar field steps
-        self.add_force_field(self.density0, self.force_source, dt)
-        self.transport_field(self.density1, self.density0, )
+        # scalar field steps (Sstep)
+        self.density0 = self.add_force_field(self.density0, self.force_source, dt)
+        self.transport_field(self.density0, self.density1, self.velocity1, self.dt)
+        self.diffuse_field(self.density0, self.density1, self.diffusion, self.dt)
+        self.dissipate_field(self.density0, self.density1, self.dissipation_rate, self.dt)
 
-        # density steps
-
+    def add_force_velocity(self, velocity0, force, dt: float): - None
         pass
 
-    def add_force_velocity(self, velocity0, force, dt: float):
+    def transport_velocity(self, velocity0, velocity1, velocity_total, dt: float) -> None:
         pass
 
-    def transport_velocity(self, velocity0, velocity1, velocity_total, dt: float):
+    def diffuse_velocity(self, velocity0, velocity1, visc, dt: float) -> None:
         pass
 
-    def diffuse_velocity(self, velocity0, velocity1, visc, dt: float):
+    def project_velocity(self, velocity0, velocity1, dt: float) -> None:
         pass
 
-    def project_velocity(self, velocity0, velocity1, dt: float):
+    def add_force_field(self, density0, source, dt: float) -> None:
+        return density0 + source * dt
+
+    def transport_field(self, density0, density1, velocity, dt: float) -> None:
         pass
 
-    def add_force_field(self, density0, source, dt: float):
+    def diffuse_field(self, density0, density1, diffusion: float, dt: float) -> None:
         pass
 
-    def transport_field(self, density0, density1, velocity, dt: float):
+    def dissipate_field(self, density0, density1, dissipation_rate: float, dt: float) -> None:
         pass
 
-    def diffuse_field(self, density0, density1, diffusion_const: float, dt: float):
-        pass
-
-    def dissipate_field(self, density0, density1, dissipation_rate: float, dt: float):
+    def trace_particle(self, pos: (int, int), velocity, dt, steps=100) -> (int, int):
+        for i in range(steps):
+            k0 = velocity[pos]
+            k1_x = pos + 0.5 * k0
         pass
