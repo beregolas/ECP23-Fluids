@@ -69,7 +69,8 @@ class World2D:
     # p 125 transport function
     def transport_field(self, density0, density1, velocity, dt: float) -> None:
         for i, j in itertools.product(range(self.shape[0]), range(self.shape[1])):
-            x = (i+0.5, j+0.5) #FIXME: Original formula is multiplied by "D". What is D?
+            # TODO original code works on coordinated instead of indices. Check whether there is a difference
+            x = (i+0.5, j+0.5)
             x_prev = self.trace_particle(x, velocity, dt)
             density1[i, j] = density0[x_prev]   # FIXME Original formula interpolates linearly? How, what and why?
 
