@@ -7,12 +7,16 @@ class World2D:
     def __init__(self, size: Tuple[float, float], shape: Tuple[int, int], viscosity: float, diffusion: float,
                  dissipation_rate: float):
         # World parameters
+        self.ndim = 2
         self.size = size                    # L
         self.shape = shape                  # N
 
+        # Velocity fields are vector fields
+        vshape = (self.ndim, ) + shape
+
         # Field
-        self.velocity0 = np.zeros(shape)    # U0
-        self.velocity1 = np.zeros(shape)    # U1
+        self.velocity0 = np.zeros(vshape)    # U0
+        self.velocity1 = np.zeros(vshape)    # U1
 
         # Substance
         self.density0 = np.zeros(shape)     # S0
@@ -21,8 +25,8 @@ class World2D:
         self.diffusion = diffusion          # kS
         self.dissipation_rate = dissipation_rate    # aS
 
-        self.force = 0  # TODO for future use
-        self.force_source = (0, 0)  #TODO for future use
+        self.force = np.zeros(vshape)       # TODO for future use
+        self.force_source = (0, 0)          # TODO for future use
 
         self.voxel_size = [0] * len(size)   # D
         for i in range(len(size)):
@@ -35,27 +39,34 @@ class World2D:
         # switch fields, older field is in [...]1
         self.velocity0, self.velocity1 = self.velocity1, self.velocity0
         self.density0, self.density1 = self.density1, self.density0
+
         # velocity steps (Vstep)
-        for i in range(2):
-            self.add_force_velocity(self.velocity0[i], self.force, dt)
-        for i in range(2):
+        for i in range(self.ndim):
+            self.add_force_velocity(self.velocity0[i], self.force[i], dt)
+        for i in range(self.ndim):
             self.transport_velocity(self.velocity0[i], self.velocity1[i], self.velocity0, dt)
-        for i in range(2):
+        for i in range(self.ndim):
             self.diffuse_velocity(self.velocity0[i], self.velocity1[i], self.viscosity, dt)
         self.project_velocity(self.velocity0, self.velocity1, dt)
 
         # scalar field steps (Sstep)
-        self.density0 = self.add_force_field(self.density0, self.force_source, dt)
-        self.transport_field(self.density0, self.density1, self.velocity1, self.dt)
-        self.diffuse_field(self.density0, self.density1, self.diffusion, self.dt)
-        self.dissipate_field(self.density0, self.density1, self.dissipation_rate, self.dt)
+        self.add_force_field(self.density0, self.force_source, dt)
+        self.transport_field(self.density0, self.density1, self.velocity1, dt)
+        self.diffuse_field(self.density0, self.density1, self.diffusion, dt)
+        self.dissipate_field(self.density0, self.density1, self.dissipation_rate, dt)
 
     def add_force_velocity(self, velocity0, force, dt: float) -> None:
-        pass
+        for i, j in itertools.product(range(velocity0.shape[0]), range(velocity0.shape[1])):
+            velocity0[i, j] += force[i, j] * dt
 
-    #Appendix A
+    # The velocity stays constant after advection. So trace back the particle in time and take its velocity
+    # Note that this method is invoked for only one component of the velocity field at a time
+    # Appendix A
     def transport_velocity(self, velocity0, velocity1, velocity_total, dt: float) -> None:
-        pass
+        for i, j in itertools.product(range(velocity0.shape[0]), range(velocity0.shape[1])):
+            x = (i, j)
+            x_prev = self.trace_particle(x, velocity_total, dt)
+            velocity1[i, j] = velocity0[x_prev]
 
     def diffuse_velocity(self, velocity0, velocity1, visc, dt: float) -> None:
         pass
@@ -68,7 +79,7 @@ class World2D:
 
     # p 125 transport function
     def transport_field(self, density0, density1, velocity, dt: float) -> None:
-        for i, j in itertools.product(range(self.shape[0]), range(self.shape[1])):
+        for i, j in itertools.product(range(density0.shape[0]), range(density0.shape[1])):
             # TODO original code works on coordinated instead of indices. Check whether there is a difference
             x = (i+0.5, j+0.5)
             x_prev = self.trace_particle(x, velocity, dt)
