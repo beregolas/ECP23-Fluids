@@ -61,9 +61,12 @@ class World2D:
             x_prev = self.trace_particle(x, velocity_total, dt)
             velocity1[i, j] = velocity0[x_prev]
         return velocity1
+
+    # Appendix B, p123. right
     def diffuse_velocity(self, velocity0, visc, dt: float):
         pass
 
+    # Appendix B, p123. right
     def project_velocity(self, velocity0, dt: float):
         pass
 
