@@ -113,3 +113,30 @@ class World2D:
     def cartesian_poisson_2d(self, u, pos:(int, int)):
         pass
 
+    # Creates the LHS of the 2D Poisson system of linear equations
+    # This stays constant over the runtime of the program and therefor needs to be invoked only once
+    # Comparable to the top equation in Appendix B, BUT THE SIGNS OF A AND B ARE FLIPPED!!
+    # TODO Implement other values for out of bounds values. Current implementation lets the bounds be walls (I think...)
+    # TODO Find out why the original equations multiply with k
+    def create_2d_poisson_array(self, shape, x_factor, y_factor):
+        back = np.zeros((shape[0] * shape[1], shape[0] * shape[1]))
+        cr = 0      # Current row
+        s1 = shape[1]
+        for i in range(shape[0]):
+            for j in range(shape[1]):
+                # -u[i+1, j] + 2u[i, j] - u[i-1, j]
+                if j-1 >= 0:
+                    back[cr, j-1 + i*s1] += -x_factor
+                back[cr, j + i*s1] += 2*x_factor
+                if j+1 < shape[1]:
+                    back[cr, j+1 + i*s1] += -x_factor
+
+                # -u[i, j+1] + 2u[i, j] - u[i, j-1]
+                if i-1 >= 0:
+                    back[cr, j + (i-1)*s1] += -y_factor
+                back[cr, j + i*s1] += 2*y_factor
+                if i+1 < shape[0]:
+                    back[cr, j + (i+1)*s1] += -y_factor
+                cr += 1
+        return back
+
