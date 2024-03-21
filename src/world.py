@@ -33,6 +33,11 @@ class World2D:
         pass
 
     def step(self, dt: float):
+        self.diffusion_poisson_array = self.create_2d_poisson_array(self.shape, dt * self.diffusion / (self.voxel_size[0] * self.voxel_size[0]), dt * self.diffusion / (self.voxel_size[1] * self.voxel_size[1]))
+        self.diffusion_poisson_array += np.identity(self.shape[0]*self.shape[1]) # TODO Check for sign errors
+
+        self.divergence_poisson_array = self.create_2d_poisson_array(self.shape, 1/(self.voxel_size[0] * self.voxel_size[0]), 1/(self.voxel_size[1] * self.voxel_size[1])) # TODO Check for sign errors
+
         # velocity steps (Vstep)
         for i in range(self.ndim):
             self.velocity[i] = self.add_force_velocity(self.velocity[i], self.force[i], dt)
@@ -68,10 +73,15 @@ class World2D:
 
     # Appendix B, p123. right
     def project_velocity(self, velocity0, dt: float):
-        pass
+        div = self.divergence_velocity(velocity0, self.voxel_size)
+        sol = self.solve_sparse_system(self.divergence_poisson_array, div)
+        sol = np.reshape(sol, self.shape)
+        return velocity0 - np.gradient(sol, self.voxel_size[0], self.voxel_size[1])     # TODO validate
+
 
     def add_force_field(self, density0, source, dt: float):
-        return density0 + source * dt   # TODO validate, seems fishy
+        # source seems to be the external forces
+        return density0 + source * dt
 
     # p 125 transport function
     def transport_field(self, density0, velocity, dt: float):
@@ -84,12 +94,14 @@ class World2D:
         return density1
 
     def diffuse_field(self, density0, diffusion: float, dt: float):
-        pass
+        rhs = density0.flatten('C')
+        return self.solve_sparse_system(self.diffusion_poisson_array, rhs)
+
 
     def dissipate_field(self, density0, dissipation_rate: float, dt: float):
         dissipation_matrix = np.full(self.shape, 1 + dt * dissipation_rate)
         density1 = density0 / dissipation_matrix    # Elementwise division
-        return density1
+        return density1.reshape(density0.shape)     # Check whether correct reshape
 
     # Calculates the position of a particle in the field at the last timestep. Used for advection(transport)
     # p. 125 bottom right
@@ -104,13 +116,26 @@ class World2D:
             k2 = h * velocity[curr_pos + k1/2]
             curr_pos = curr_pos + k2
 
+    def divergence_velocity(self, velocity, voxel_size):
+        # TODO Test following line: divergence = np.sum(np.gradient(velocity, dx, dy, dz), axis=0)
+        back = np.zeros(velocity.shape)
+        for i, j in itertools.product(range(velocity.shape[0]), range(velocity.shape[1])):
+            back[i, j] = velocity[0, i+1, j] / voxel_size[0]
+            back[i, j] -= velocity[0, i-1, j] / voxel_size[0]
+
+            back[i, j] += velocity[1, i, j+1] / voxel_size[1]
+            back[i, j] -= velocity[1, i, j-1] / voxel_size[1]
+
     # Poisson 2d cartesian differential equation:
     # δ^2*u/δ^2x + δ^2*u/δ^2x = f(x, y)
     #
     # Finite difference equation TODO: validate
     # δ^2*u/δ^2x = (u[i+1, j] - 2u[i, j] + u[i-1, j]) / dx^2
     # δ^2*u/δ^2y = (u[i, j+1] - 2u[i, j] + u[i, j-1]) / dy^2
-    def cartesian_poisson_2d(self, u, pos:(int, int)):
+    def cartesian_poisson_2d(self, u, pos: (int, int)):
+        pass
+
+    def solve_sparse_system(self, lhs, rhs):
         pass
 
     # Creates the LHS of the 2D Poisson system of linear equations
