@@ -33,11 +33,16 @@ class World2D:
         pass
 
     def step(self, dt: float):
-        self.diffusion_poisson_array = self.create_2d_poisson_array(self.shape, dt * self.diffusion / (
-                    self.voxel_size[0] * self.voxel_size[0]), dt * self.diffusion / (
-                                                                                self.voxel_size[1] * self.voxel_size[
-                                                                            1]))
-        self.diffusion_poisson_array += np.identity(self.shape[0] * self.shape[1])  # TODO Check for sign errors
+        velocity_diffusion_poisson_array = self.create_2d_poisson_array(self.shape,
+                dt * self.viscosity / (self.voxel_size[0] * self.voxel_size[0]),
+                dt * self.viscosity / (self.voxel_size[1] * self.voxel_size[1]))
+
+        field_diffusion_poisson_array = self.create_2d_poisson_array(self.shape,
+                dt * self.diffusion / (self.voxel_size[0] * self.voxel_size[0]),
+                dt * self.diffusion / (self.voxel_size[1] * self.voxel_size[1]))
+
+        field_diffusion_poisson_array += np.identity(self.shape[0] * self.shape[1])  # TODO Check for sign errors
+        velocity_diffusion_poisson_array += np.identity(self.shape[0] * self.shape[1])  # TODO Check for sign errors
 
         self.divergence_poisson_array = self.create_2d_poisson_array(self.shape,
                                                                      1 / (self.voxel_size[0] * self.voxel_size[0]),
@@ -46,36 +51,34 @@ class World2D:
 
         # velocity steps (Vstep)
         for i in range(self.ndim):
-            self.velocity[i] = self.add_force_velocity(self.velocity[i], self.force[i], dt)
+            self.velocity[i] = self.add_force(self.velocity[i], self.force[i], dt)
         for i in range(self.ndim):
-            self.velocity[i] = self.transport_velocity(self.velocity[i], self.velocity, dt)
+            self.velocity[i] = self.transport(self.velocity[i], self.velocity, dt)
         for i in range(self.ndim):
-            self.velocity[i] = self.diffuse_velocity(self.velocity[i], self.viscosity, dt)
+            self.velocity[i] = self.diffuse(self.velocity[i], velocity_diffusion_poisson_array)
         self.project_velocity(self.velocity, dt)
 
         # scalar field steps (Sstep)
-        # self.density = self.add_force_field(self.density, self.force, dt)
-        self.density = self.transport_field(self.density, self.velocity, dt)
-        self.density = self.diffuse_field(self.density, self.diffusion, dt)
+        # self.density = self.add_force(self.density, self.force, dt)
+        self.density = self.transport(self.density, self.velocity, dt)
+        self.density = self.diffuse(self.density, field_diffusion_poisson_array)
         self.density = self.dissipate_field(self.density, self.dissipation_rate, dt)
 
-    def add_force_velocity(self, velocity0, force, dt: float):
-        return velocity0 + (force * dt)  # Elementwise addition and multiplication
+    def add_force(self, field, force, dt: float):
+        return field + (force * dt)  # Elementwise addition and multiplication
 
-    # The velocity stays constant after advection. So trace back the particle in time and take its velocity
-    # Note that this method is invoked for only one component of the velocity field at a time
+    # The velocity and density stays constant after advection.
+    # So trace back the particle in time and take its velocity and density
+    # Note that this method is invoked for only one component of the velocity field at a time.
     # Appendix A
-    def transport_velocity(self, velocity0, velocity_total, dt: float):
-        velocity1 = np.zeros(velocity0.shape)
-        for i, j in itertools.product(range(velocity0.shape[0]), range(velocity0.shape[1])):
+    def transport(self, field, velocity_total, dt: float):
+        # TODO Check for sign errors, seems to not work on the edges
+        back = np.zeros(field.shape)
+        for i, j in itertools.product(range(field.shape[0]), range(field.shape[1])):
             x = (i, j)
             x_prev = self.trace_particle(x, velocity_total, dt)
-            velocity1[i, j] = self.interpolate_field(x_prev, velocity0)
-        return velocity1
-
-    # Appendix B, p123. right
-    def diffuse_velocity(self, velocity0, visc, dt: float):
-        return self.solve_sparse_system(self.diffusion_poisson_array, velocity0)
+            back[i, j] = self.interpolate_field(x_prev, field)
+        return back
 
     # Appendix B, p123. right
     def project_velocity(self, velocity0, dt: float):
@@ -84,22 +87,9 @@ class World2D:
         sol = sol.reshape(self.shape)
         return velocity0 - np.gradient(sol, self.voxel_size[0], self.voxel_size[1])  # TODO validate
 
-    def add_force_field(self, density0, source, dt: float):
-        # source seems to be the external forces
-        return density0 + source * dt
-
-    # p 125 transport function
-    def transport_field(self, density0, velocity, dt: float):
-        density1 = np.zeros(density0.shape)
-        for i, j in itertools.product(range(density0.shape[0]), range(density0.shape[1])):
-            # TODO original code works on coordinated instead of indices. Check whether there is a difference
-            x = (i, j)
-            x_prev = self.trace_particle(x, velocity, dt)
-            density1[i, j] = self.interpolate_field(x_prev, density0)
-        return density1
-
-    def diffuse_field(self, density0, diffusion: float, dt: float):
-        return self.solve_sparse_system(self.diffusion_poisson_array, density0)
+    # Appendix B
+    def diffuse(self, density0, poisson_array):
+        return self.solve_sparse_system(poisson_array, density0)
 
     def dissipate_field(self, density0, dissipation_rate: float, dt: float):
         dissipation_matrix = np.full(self.shape, 1 + dt * dissipation_rate)
@@ -111,9 +101,7 @@ class World2D:
     def trace_particle(self, pos: (int, int), velocity, dt, steps=1) -> (float, float):
         h = -dt / steps  # Note that we use -dt to traverse the fild in the opposite direction
         curr_pos = pos
-        # FIXME: Correct implementation of tuple addition/multiplication (pairwise)
-        # FIXME: Find out how to handle float indices (maybe interpolate between neighboring cells?, Maybe round to next int?)
-        # FIXME: velocity is a tuple of arrays
+        # TODO Cleaner code
         for i in range(steps):
             k1 = self.interpolate_velocity(curr_pos, velocity)
             k1 = (h * k1[0], h * k1[1])
