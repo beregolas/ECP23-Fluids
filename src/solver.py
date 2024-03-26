@@ -12,12 +12,12 @@ if __name__ == "__main__":
     
     shape = (10, 10)
     world = World2D(shape, shape, 0.0005, 0.01, 0.01)
-    world.density = np.random.randn(shape[0], shape[1])
-    world.velocity[0] = np.random.randn(shape[0], shape[1])
-    world.velocity[1] = np.random.randn(shape[0], shape[1])
+    world.density = np.random.randn(shape[0] + 2, shape[1] + 2)
+    world.velocity[0, 1:-1, 1:-1] = np.random.randn(shape[0], shape[1])
+    world.velocity[1, 1:-1, 1:-1] = np.random.randn(shape[0], shape[1])
 
-    x = np.linspace(0, shape[0], shape[0])
-    y = np.linspace(0, shape[1], shape[1])
+    x = np.linspace(0, shape[0] + 2, shape[0] + 2)
+    y = np.linspace(0, shape[1] + 2, shape[1] + 2)
     X, Y = np.meshgrid(x, y)
 
     fig, (ax1, ax2) = plt.subplots(1, 2)

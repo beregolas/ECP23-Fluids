@@ -11,8 +11,9 @@ class World2D:
         # World parameters
         self.ndim = 2
         self.size = size  # L
-        self.shape = shape  # N
-        self.vshape = (self.ndim,) + shape  # Velocity fields are vector fields
+        self.shape = (shape[0], shape[1])  # N
+        self.boundary_shape = (shape[0]+2, shape[1] + 2)  # Field shape with boundaries
+        self.vshape = (self.ndim,) + self.boundary_shape  # Velocity fields are vector fields
 
         # Field
         self.velocity = np.zeros(self.vshape)  # U0
@@ -58,7 +59,7 @@ class World2D:
         for i in range(self.ndim):
             self.velocity[i] = self.transport(self.velocity[i], self.velocity, dt)
         for i in range(self.ndim):
-            self.velocity[i] = self.diffuse(self.velocity[i], velocity_diffusion_poisson_array)
+            self.velocity[i, 1:-1, 1:-1] = self.diffuse(self.velocity[i, 1:-1, 1:-1], velocity_diffusion_poisson_array)
         self.project_velocity(self.velocity, dt)
 
         # scalar field steps (Sstep)
@@ -80,15 +81,15 @@ class World2D:
         #  The edges should "push back" against a velocity towards it. Note that the direction of the velocity needs
         #  to be a parameter for that. See also http://www.multires.caltech.edu/teaching/demos/java/FluidSolver.java
         back = np.zeros(field.shape)
-        for i, j in itertools.product(range(field.shape[0]), range(field.shape[1])):
-            x = (i, j)
+        for i, j in itertools.product(range(1, field.shape[0] - 1), range(1, field.shape[1] - 1)):
+            x = (i + .5, j + .5)
             x_prev = self.trace_particle(x, velocity_total, dt)
             back[i, j] = self.interpolate_field(x_prev, field)
         return back
 
     # Appendix B, p123. right
     def project_velocity(self, velocity0, dt: float):
-        div = self.divergence_velocity(velocity0, self.voxel_size)
+        div = self.divergence_velocity(velocity0[:, 1:-1, 1:-1], self.voxel_size)
         sol = self.solve_sparse_system(self.divergence_poisson_array, div)
         sol = sol.reshape(self.shape)
         return velocity0 - np.gradient(sol, self.voxel_size[0], self.voxel_size[1])  # TODO validate
@@ -164,8 +165,8 @@ class World2D:
         back = np.zeros((shape[0] * shape[1], shape[0] * shape[1]))
         cr = 0  # Current row
         s1 = shape[1]
-        for i in range(shape[0]):
-            for j in range(shape[1]):
+        for i in range(1, shape[0]):
+            for j in range(1, shape[1]):
                 # -u[i+1, j] + 2u[i, j] - u[i-1, j]
                 if j - 1 >= 0:
                     back[cr, j - 1 + i * s1] += -x_factor
