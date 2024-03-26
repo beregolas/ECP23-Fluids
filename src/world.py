@@ -4,6 +4,7 @@ import numpy as np
 from scipy.sparse.linalg import spsolve
 
 
+# TODO step and solver methods should not be in this class
 class World2D:
     def __init__(self, size: Tuple[float, float], shape: Tuple[int, int], viscosity: float, diffusion: float,
                  dissipation_rate: float):
@@ -49,6 +50,8 @@ class World2D:
                                                                      1 / (self.voxel_size[1] * self.voxel_size[
                                                                          1]))  # TODO Check for sign errors
 
+        # TODO implement gravity and buoyancy
+
         # velocity steps (Vstep)
         for i in range(self.ndim):
             self.velocity[i] = self.add_force(self.velocity[i], self.force[i], dt)
@@ -73,6 +76,9 @@ class World2D:
     # Appendix A
     def transport(self, field, velocity_total, dt: float):
         # TODO Check for sign errors, seems to not work on the edges
+        # FIXME Edge handling: for advecting velocities:
+        #  The edges should "push back" against a velocity towards it. Note that the direction of the velocity needs
+        #  to be a parameter for that. See also http://www.multires.caltech.edu/teaching/demos/java/FluidSolver.java
         back = np.zeros(field.shape)
         for i, j in itertools.product(range(field.shape[0]), range(field.shape[1])):
             x = (i, j)
@@ -145,15 +151,6 @@ class World2D:
                 back[i, j] -= velocity[1, i, j - 1] / voxel_size[1]
         return back
 
-    # Poisson 2d cartesian differential equation:
-    # δ^2*u/δ^2x + δ^2*u/δ^2x = f(x, y)
-    #
-    # Finite difference equation TODO: validate
-    # δ^2*u/δ^2x = (u[i+1, j] - 2u[i, j] + u[i-1, j]) / dx^2
-    # δ^2*u/δ^2y = (u[i, j+1] - 2u[i, j] + u[i, j-1]) / dy^2
-    def cartesian_poisson_2d(self, u, pos: (int, int)):
-        pass
-
     def solve_sparse_system(self, lhs, rhs):
         flat_rhs = rhs.flatten('C')
         sol = spsolve(lhs, flat_rhs)
@@ -163,7 +160,6 @@ class World2D:
     # This stays constant over the runtime of the program and therefor needs to be invoked only once
     # Comparable to the top equation in Appendix B, BUT THE SIGNS OF A AND B ARE FLIPPED!!
     # TODO Implement other values for out of bounds values. Current implementation lets the bounds be walls (I think...)
-    # TODO Find out why the original equations multiply with k
     def create_2d_poisson_array(self, shape, x_factor, y_factor):
         back = np.zeros((shape[0] * shape[1], shape[0] * shape[1]))
         cr = 0  # Current row
