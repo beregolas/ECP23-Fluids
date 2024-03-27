@@ -2,7 +2,9 @@ import itertools
 import math
 from typing import Tuple
 import numpy as np
+import scipy.sparse
 from scipy.sparse.linalg import spsolve
+from scipy.sparse import csc_matrix
 
 
 # TODO step and solver methods should not be in this class
@@ -47,9 +49,13 @@ class World2D:
         velocity_diffusion_poisson_array += np.identity(self.shape[0] * self.shape[1])  # TODO Check for sign errors
 
         self.divergence_poisson_array = self.create_2d_poisson_array(self.shape,
-                                                                     1 / (self.voxel_size[0] * self.voxel_size[0]),
-                                                                     1 / (self.voxel_size[1] * self.voxel_size[
+                                                                     -1 / (self.voxel_size[0] * self.voxel_size[0]),
+                                                                     -1 / (self.voxel_size[1] * self.voxel_size[
                                                                          1]))  # TODO Check for sign errors
+
+        velocity_diffusion_poisson_array = csc_matrix(velocity_diffusion_poisson_array)
+        field_diffusion_poisson_array = csc_matrix(field_diffusion_poisson_array)
+        self.divergence_poisson_array = csc_matrix(self.divergence_poisson_array)
 
         # TODO implement gravity and buoyancy
 
@@ -82,9 +88,9 @@ class World2D:
         #  to be a parameter for that. See also http://www.multires.caltech.edu/teaching/demos/java/FluidSolver.java
         back = np.zeros(field.shape)
         for i, j in itertools.product(range(field.shape[0]), range(field.shape[1])):
-            x = (i + .5, j + .5)
+            x = (i, j)      # TODO Paper suggests adding +0.5, but this makes out results weird
             x_prev = self.trace_particle(x, velocity_total, dt)
-            x_prev = (x_prev[0] - .5, x_prev[1] - .5)
+            # x_prev = (x_prev[0], x_prev[1])
             back[i, j] = self.interpolate_field(x_prev, field, bound_type)
         return back
 
@@ -139,20 +145,20 @@ class World2D:
 
     def access_field_with_bound(self, field, int_coords, bound_type):
         coords_in_field = (min(max(int_coords[0], field.shape[0] - 1), 0), min(max(int_coords[1], field.shape[1] - 1), 0))
-        if ((int_coords[0] - 1 < 0 and int_coords[1] < 0) or
+        if ((int_coords[0] < 0 and int_coords[1] < 0) or
                 (int_coords[0] >= field.shape[0] and int_coords[1] < 0) or
-                (int_coords[0] - 1 < 0 and int_coords[1] >= field.shape[1]) or
+                (int_coords[0] < 0 and int_coords[1] >= field.shape[1]) or
                 (int_coords[0] >= field.shape[0] and int_coords[1] >= field.shape[1])):
             if bound_type != 0:
                 back = 0
             else:
                 back = field[coords_in_field]
-        elif int_coords[0] - 1 < 0 or int_coords[0] >= field.shape[0]:
+        elif int_coords[0] < 0 or int_coords[0] >= field.shape[0]:
             if bound_type == 1:
                 back = -field[coords_in_field]
             else:
                 back = field[coords_in_field]
-        elif int_coords[1] - 1 < 0 or int_coords[1] >= field.shape[1]:
+        elif int_coords[1] < 0 or int_coords[1] >= field.shape[1]:
             if bound_type == 2:
                 back = -field[coords_in_field]
             else:
@@ -169,20 +175,16 @@ class World2D:
         # TODO Implement bounds
         back = np.zeros((velocity.shape[1], velocity.shape[2]))
         for i, j in itertools.product(range(velocity.shape[1]), range(velocity.shape[2])):
-            if i + 1 < velocity.shape[1]:
-                back[i, j] += velocity[0, i + 1, j] / voxel_size[0]
-            if i > 0:
-                back[i, j] -= velocity[0, i - 1, j] / voxel_size[0]
+            back[i, j] += self.access_field_with_bound(velocity[0], (i + 1, j), 1) / voxel_size[0]
+            back[i, j] -= self.access_field_with_bound(velocity[0], (i - 1, j), 1) / voxel_size[0]
 
-            if j + 1 < velocity.shape[2]:
-                back[i, j] += velocity[1, i, j + 1] / voxel_size[1]
-            if j > 0:
-                back[i, j] -= velocity[1, i, j - 1] / voxel_size[1]
+            back[i, j] += self.access_field_with_bound(velocity[1], (i, j + 1), 2) / voxel_size[1]
+            back[i, j] -= self.access_field_with_bound(velocity[1], (i, j - 1), 2) / voxel_size[1]
         return back
 
     def solve_sparse_system(self, lhs, rhs):
         flat_rhs = rhs.flatten('C')
-        sol = spsolve(lhs, flat_rhs)
+        sol = spsolve(lhs, flat_rhs)    # TODO SparseEfficiencyWarning: spsolve requires A be CSC or CSR matrix format
         return sol.reshape(rhs.shape)
 
     # Creates the LHS of the 2D Poisson system of linear equations
@@ -198,15 +200,22 @@ class World2D:
                 # -u[i+1, j] + 2u[i, j] - u[i-1, j]
                 if j - 1 >= 0:
                     back[cr, j - 1 + i * s1] += -x_factor
+                else:
+                    back[cr, j + i * s1] += -x_factor
                 back[cr, j + i * s1] += 2 * x_factor
                 if j + 1 < shape[1]:
                     back[cr, j + 1 + i * s1] += -x_factor
-
+                else:
+                    back[cr, j + i * s1] += -x_factor
                 # -u[i, j+1] + 2u[i, j] - u[i, j-1]
                 if i - 1 >= 0:
                     back[cr, j + (i - 1) * s1] += -y_factor
+                else:
+                    back[cr, j + i * s1] += -y_factor
                 back[cr, j + i * s1] += 2 * y_factor
                 if i + 1 < shape[0]:
                     back[cr, j + (i + 1) * s1] += -y_factor
+                else:
+                    back[cr, j + i * s1] += -y_factor
                 cr += 1
         return back
