@@ -128,6 +128,7 @@ class World2D:
     def interpolate_field(self, curr_pos, field, bound_type):
         # Variable names are labled as if top left is the least coordinate with x incrasing to the right and y increasing down
         # TODO Current boundaries are set to the last field inside
+        # with this we can get coords outside the field and boundaries
         int_coords = (int(math.floor(curr_pos[0])), int(math.floor(curr_pos[1])))
 
         top_left = self.access_field_with_bound(field, int_coords, bound_type)
@@ -143,8 +144,10 @@ class World2D:
 
         return back
 
+    # bound_type 0 for density, 1 for velocity field horizontal, 2 for velocity field vertical
     def access_field_with_bound(self, field, int_coords, bound_type):
-        coords_in_field = (min(max(int_coords[0], field.shape[0] - 1), 0), min(max(int_coords[1], field.shape[1] - 1), 0))
+        coords_in_field = (np.clip(int_coords[0], 0, field.shape[0] - 1), np.clip(int_coords[1], 0, field.shape[1] - 1))
+        # we are in a boundary corner
         if ((int_coords[0] < 0 and int_coords[1] < 0) or
                 (int_coords[0] >= field.shape[0] and int_coords[1] < 0) or
                 (int_coords[0] < 0 and int_coords[1] >= field.shape[1]) or
@@ -153,16 +156,19 @@ class World2D:
                 back = 0
             else:
                 back = field[coords_in_field]
+        # we are on the left or right boundary
         elif int_coords[0] < 0 or int_coords[0] >= field.shape[0]:
             if bound_type == 1:
                 back = -field[coords_in_field]
             else:
                 back = field[coords_in_field]
+        # we are on the upper or lower boundary
         elif int_coords[1] < 0 or int_coords[1] >= field.shape[1]:
             if bound_type == 2:
                 back = -field[coords_in_field]
             else:
                 back = field[coords_in_field]
+        # we are inside the field
         else:
             back = field[int_coords]
         return back
