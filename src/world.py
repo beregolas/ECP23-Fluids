@@ -1,4 +1,5 @@
 import itertools
+import math
 from typing import Tuple
 import numpy as np
 from scipy.sparse.linalg import spsolve
@@ -56,14 +57,14 @@ class World2D:
         for i in range(self.ndim):
             self.velocity[i] = self.add_force(self.velocity[i], self.force[i], dt)
         for i in range(self.ndim):
-            self.velocity[i] = self.transport(self.velocity[i], self.velocity, dt)
+            self.velocity[i] = self.transport(self.velocity[i], self.velocity, dt, i+1)
         for i in range(self.ndim):
             self.velocity[i] = self.diffuse(self.velocity[i], velocity_diffusion_poisson_array)
         self.project_velocity(self.velocity, dt)
 
         # scalar field steps (Sstep)
         # self.density = self.add_force(self.density, self.force, dt)
-        self.density = self.transport(self.density, self.velocity, dt)
+        self.density = self.transport(self.density, self.velocity, dt, 0)
         self.density = self.diffuse(self.density, field_diffusion_poisson_array)
         self.density = self.dissipate_field(self.density, self.dissipation_rate, dt)
 
@@ -74,16 +75,17 @@ class World2D:
     # So trace back the particle in time and take its velocity and density
     # Note that this method is invoked for only one component of the velocity field at a time.
     # Appendix A
-    def transport(self, field, velocity_total, dt: float):
+    def transport(self, field, velocity_total, dt: float, bound_type):
         # TODO Check for sign errors, seems to not work on the edges
         # FIXME Edge handling: for advecting velocities:
         #  The edges should "push back" against a velocity towards it. Note that the direction of the velocity needs
         #  to be a parameter for that. See also http://www.multires.caltech.edu/teaching/demos/java/FluidSolver.java
         back = np.zeros(field.shape)
         for i, j in itertools.product(range(field.shape[0]), range(field.shape[1])):
-            x = (i, j)
+            x = (i + .5, j + .5)
             x_prev = self.trace_particle(x, velocity_total, dt)
-            back[i, j] = self.interpolate_field(x_prev, field)
+            x_prev = (x_prev[0] - .5, x_prev[1] - .5)
+            back[i, j] = self.interpolate_field(x_prev, field, bound_type)
         return back
 
     # Appendix B, p123. right
@@ -91,7 +93,7 @@ class World2D:
         div = self.divergence_velocity(velocity0, self.voxel_size)
         sol = self.solve_sparse_system(self.divergence_poisson_array, div)
         sol = sol.reshape(self.shape)
-        return velocity0 - np.gradient(sol, self.voxel_size[0], self.voxel_size[1])  # TODO validate
+        return velocity0 - np.gradient(sol, self.voxel_size[0], self.voxel_size[1])  # TODO implement bounds
 
     # Appendix B
     def diffuse(self, density0, poisson_array):
@@ -117,27 +119,54 @@ class World2D:
             curr_pos = (curr_pos[0] + k2[0], curr_pos[1] + k2[1])
         return curr_pos
 
-    def interpolate_field(self, curr_pos, field):
+    def interpolate_field(self, curr_pos, field, bound_type):
         # Variable names are labled as if top left is the least coordinate with x incrasing to the right and y increasing down
         # TODO Current boundaries are set to the last field inside
-        top_left = (int(curr_pos[0]), int(curr_pos[1]))
-        top_right = (min(top_left[0] + 1, field.shape[0] - 1), top_left[1])
-        bottom_left = (top_left[0], min(top_left[1] + 1, field.shape[1] - 1))
-        bottom_right = (min(top_left[0] + 1, field.shape[0] - 1), min(top_left[1] + 1, field.shape[1] - 1))
+        int_coords = (int(math.floor(curr_pos[0])), int(math.floor(curr_pos[1])))
 
-        ratio_down = curr_pos[0] - top_left[0]
-        ratio_right = curr_pos[1] - top_left[1]
+        top_left = self.access_field_with_bound(field, int_coords, bound_type)
+        top_right = self.access_field_with_bound(field, (int_coords[0] + 1, int_coords[1]), bound_type)
+        bottom_left = self.access_field_with_bound(field, (int_coords[0], int_coords[1] + 1), bound_type)
+        bottom_right = self.access_field_with_bound(field, (int_coords[0] + 1, int_coords[1] + 1), bound_type)
 
-        back = (1 - ratio_down) * ((1 - ratio_right) * field[top_left] + ratio_right * field[top_right]) + \
-               ratio_down * ((1 - ratio_right) * field[bottom_left] + ratio_right * field[bottom_right])
+        ratio_down = curr_pos[0] - int_coords[0]
+        ratio_right = curr_pos[1] - int_coords[1]
+
+        back = (1 - ratio_down) * ((1 - ratio_right) * top_left + ratio_right * top_right) + \
+               ratio_down * ((1 - ratio_right) * bottom_left + ratio_right * bottom_right)
 
         return back
 
+    def access_field_with_bound(self, field, int_coords, bound_type):
+        coords_in_field = (min(max(int_coords[0], field.shape[0] - 1), 0), min(max(int_coords[1], field.shape[1] - 1), 0))
+        if ((int_coords[0] - 1 < 0 and int_coords[1] < 0) or
+                (int_coords[0] >= field.shape[0] and int_coords[1] < 0) or
+                (int_coords[0] - 1 < 0 and int_coords[1] >= field.shape[1]) or
+                (int_coords[0] >= field.shape[0] and int_coords[1] >= field.shape[1])):
+            if bound_type != 0:
+                back = 0
+            else:
+                back = field[coords_in_field]
+        elif int_coords[0] - 1 < 0 or int_coords[0] >= field.shape[0]:
+            if bound_type == 1:
+                back = -field[coords_in_field]
+            else:
+                back = field[coords_in_field]
+        elif int_coords[1] - 1 < 0 or int_coords[1] >= field.shape[1]:
+            if bound_type == 2:
+                back = -field[coords_in_field]
+            else:
+                back = field[coords_in_field]
+        else:
+            back = field[int_coords]
+        return back
+
     def interpolate_velocity(self, curr_pos, velocity):
-        return self.interpolate_field(curr_pos, velocity[0]), self.interpolate_field(curr_pos, velocity[1])
+        return self.interpolate_field(curr_pos, velocity[0], 1), self.interpolate_field(curr_pos, velocity[1], 2)
 
     def divergence_velocity(self, velocity, voxel_size):
         # TODO Test following line: divergence = np.sum(np.gradient(velocity, dx, dy, dz), axis=0)
+        # TODO Implement bounds
         back = np.zeros((velocity.shape[1], velocity.shape[2]))
         for i, j in itertools.product(range(velocity.shape[1]), range(velocity.shape[2])):
             if i + 1 < velocity.shape[1]:
