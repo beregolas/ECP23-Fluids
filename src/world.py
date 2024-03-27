@@ -139,8 +139,8 @@ class World2D:
         ratio_down = curr_pos[0] - int_coords[0]
         ratio_right = curr_pos[1] - int_coords[1]
 
-        back = (1 - ratio_down) * ((1 - ratio_right) * top_left + ratio_right * top_right) + \
-               ratio_down * ((1 - ratio_right) * bottom_left + ratio_right * bottom_right)
+        back = (1 - ratio_down) * (ratio_right * top_left + (1 - ratio_right) * top_right) + \
+               ratio_down * (ratio_right * bottom_left + (1 - ratio_right) * bottom_right)
 
         return back
 
