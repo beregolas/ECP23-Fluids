@@ -48,14 +48,14 @@ class World2D:
         field_diffusion_poisson_array += np.identity(self.shape[0] * self.shape[1])  # TODO Check for sign errors
         velocity_diffusion_poisson_array += np.identity(self.shape[0] * self.shape[1])  # TODO Check for sign errors
 
-        self.divergence_poisson_array = self.create_2d_poisson_array(self.shape,
+        self.projection_poisson_array = self.create_2d_poisson_array(self.shape,
                                                                      -1 / (self.voxel_size[0] * self.voxel_size[0]),
                                                                      -1 / (self.voxel_size[1] * self.voxel_size[
                                                                          1]))  # TODO Check for sign errors
 
         velocity_diffusion_poisson_array = csc_matrix(velocity_diffusion_poisson_array)
         field_diffusion_poisson_array = csc_matrix(field_diffusion_poisson_array)
-        self.divergence_poisson_array = csc_matrix(self.divergence_poisson_array)
+        self.projection_poisson_array = csc_matrix(self.projection_poisson_array)
 
         # TODO implement gravity and buoyancy
 
@@ -97,7 +97,7 @@ class World2D:
     # Appendix B, p123. right
     def project_velocity(self, velocity0, dt: float):
         div = self.divergence_velocity(velocity0, self.voxel_size)
-        sol = self.solve_sparse_system(self.divergence_poisson_array, div)
+        sol = self.solve_sparse_system(self.projection_poisson_array, div)
         sol = sol.reshape(self.shape)
         return velocity0 - np.gradient(sol, self.voxel_size[0], self.voxel_size[1])  # TODO implement bounds
 
