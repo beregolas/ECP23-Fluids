@@ -66,7 +66,7 @@ class World2D:
             self.velocity[i] = self.transport(self.velocity[i], self.velocity, dt, i+1)
         for i in range(self.ndim):
             self.velocity[i] = self.diffuse(self.velocity[i], velocity_diffusion_poisson_array)
-        self.project_velocity(self.velocity, dt)
+        self.velocity = self.project_velocity(self.velocity, dt)
 
         # scalar field steps (Sstep)
         # self.density = self.add_force(self.density, self.force, dt)
