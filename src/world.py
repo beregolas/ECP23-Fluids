@@ -102,13 +102,13 @@ class World2D:
         return velocity0 - np.gradient(sol, self.voxel_size[0], self.voxel_size[1])  # TODO implement bounds
 
     # Appendix B
-    def diffuse(self, density0, poisson_array):
-        return self.solve_sparse_system(poisson_array, density0)
+    def diffuse(self, field, poisson_array):
+        return self.solve_sparse_system(poisson_array, field)
 
-    def dissipate_field(self, density0, dissipation_rate: float, dt: float):
+    def dissipate_field(self, density, dissipation_rate: float, dt: float):
         dissipation_matrix = np.full(self.shape, 1 + dt * dissipation_rate)
-        density1 = density0 / dissipation_matrix  # Elementwise division
-        return density1.reshape(density0.shape)  # Check whether correct reshape
+        diss_density = density / dissipation_matrix  # Elementwise division
+        return diss_density
 
     # Calculates the position of a particle in the field at the last timestep. Used for advection(transport)
     # p. 125 bottom right
@@ -143,7 +143,7 @@ class World2D:
 
         return back
 
-    # bound_type 0 for density, 1 for velocity field horizontal, 2 for velocity field vertical
+    # bound_type 0 for density, 1 for velocity field vertical, 2 for velocity field horizontal
     def access_field_with_bound(self, field, int_coords, bound_type):
         coords_in_field = (np.clip(int_coords[0], 0, field.shape[0] - 1), np.clip(int_coords[1], 0, field.shape[1] - 1))
         # we are in a boundary corner
@@ -155,13 +155,13 @@ class World2D:
                 back = 0
             else:
                 back = field[coords_in_field]
-        # we are on the left or right boundary
+        # we are on the upper or lower boundary
         elif int_coords[0] < 0 or int_coords[0] >= field.shape[0]:
             if bound_type == 1:
                 back = -field[coords_in_field]
             else:
                 back = field[coords_in_field]
-        # we are on the upper or lower boundary
+        # we are on the left or right boundary
         elif int_coords[1] < 0 or int_coords[1] >= field.shape[1]:
             if bound_type == 2:
                 back = -field[coords_in_field]
@@ -189,13 +189,12 @@ class World2D:
 
     def solve_sparse_system(self, lhs, rhs):
         flat_rhs = rhs.flatten('C')
-        sol = spsolve(lhs, flat_rhs)    # TODO SparseEfficiencyWarning: spsolve requires A be CSC or CSR matrix format
+        sol = spsolve(lhs, flat_rhs)
         return sol.reshape(rhs.shape)
 
     # Creates the LHS of the 2D Poisson system of linear equations
     # This stays constant over the runtime of the program and therefor needs to be invoked only once
     # Comparable to the top equation in Appendix B, BUT THE SIGNS OF A AND B ARE FLIPPED!!
-    # TODO Implement other values for out of bounds values. Current implementation lets the bounds be walls (I think...)
     def create_2d_poisson_array(self, shape, x_factor, y_factor):
         back = np.zeros((shape[0] * shape[1], shape[0] * shape[1]))
         cr = 0  # Current row
@@ -206,21 +205,21 @@ class World2D:
                 if j - 1 >= 0:
                     back[cr, j - 1 + i * s1] += -x_factor
                 else:
-                    back[cr, j + i * s1] += -x_factor
+                    back[cr, j + i * s1] += x_factor
                 back[cr, j + i * s1] += 2 * x_factor
                 if j + 1 < shape[1]:
                     back[cr, j + 1 + i * s1] += -x_factor
                 else:
-                    back[cr, j + i * s1] += -x_factor
+                    back[cr, j + i * s1] += x_factor
                 # -u[i, j+1] + 2u[i, j] - u[i, j-1]
                 if i - 1 >= 0:
                     back[cr, j + (i - 1) * s1] += -y_factor
                 else:
-                    back[cr, j + i * s1] += -y_factor
+                    back[cr, j + i * s1] += y_factor
                 back[cr, j + i * s1] += 2 * y_factor
                 if i + 1 < shape[0]:
                     back[cr, j + (i + 1) * s1] += -y_factor
                 else:
-                    back[cr, j + i * s1] += -y_factor
+                    back[cr, j + i * s1] += y_factor
                 cr += 1
         return back
