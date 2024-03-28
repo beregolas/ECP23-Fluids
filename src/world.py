@@ -126,8 +126,7 @@ class World2D:
         return curr_pos
 
     def interpolate_field(self, curr_pos, field, bound_type):
-        # Variable names are labled as if top left is the least coordinate with x incrasing to the right and y increasing down
-        # TODO Current boundaries are set to the last field inside
+        # Variable names are labled as if top left is the least coordinate with y incrasing to the right and x increasing down
         # with this we can get coords outside the field and boundaries
         int_coords = (int(math.floor(curr_pos[0])), int(math.floor(curr_pos[1])))
 
