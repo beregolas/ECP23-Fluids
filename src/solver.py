@@ -8,22 +8,23 @@ import matplotlib.colors as colors
 from world import World2D
 
 if __name__ == "__main__":
-    # TODO: get input image
+    # =========|CONSTANT PARAMETERS |====================
+    shape = (20, 20)        # Size of the animation
+    fps = 1                 # Frames per second. Each frame is on computation step. Increasing this increases the load
+    animation_speed = 1     # Ratio of animation tim to real time
 
-    shape = (20, 20)
-    fps = 1
-    animation_speed = 1
     viscosity = 0.0005
     diffusion = 0.01
     dissipation_rate = 0.01
+    # ===================================================
 
     world = World2D(shape, shape, viscosity, diffusion, dissipation_rate)
-    # world.density = np.random.randn(shape[0], shape[1])
-    # world.density[5, 5] = 1
-    # world.density[12, 8] = 1
+
+    # =========|INITIAL CONDITIONS |=====================
     world.density[6:7, 2] = 1
     world.velocity[0, 6:8, 1:5] = 10
     world.velocity[1, 10:12, 2:4] = -5
+    # ===================================================
 
     x = np.linspace(0, shape[0], shape[0])
     y = np.linspace(0, shape[1], shape[1])
@@ -59,8 +60,3 @@ if __name__ == "__main__":
     anim1 = animation.FuncAnimation(fig, animate_velocity, interval=100 / fps, blit=False)
     anim2 = animation.FuncAnimation(fig, animate_density, interval=100 / fps, blit=False)
     plt.show()
-
-    # TODO: output image with imageio
-    # maybe one image per step for an animation(gif)
-
-    pass
