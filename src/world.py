@@ -132,15 +132,15 @@ class World2D:
         int_coords = (int(math.floor(curr_pos[0])), int(math.floor(curr_pos[1])))
 
         top_left = self.access_field_with_bound(field, int_coords, bound_type)
-        top_right = self.access_field_with_bound(field, (int_coords[0] + 1, int_coords[1]), bound_type)
-        bottom_left = self.access_field_with_bound(field, (int_coords[0], int_coords[1] + 1), bound_type)
+        bottom_left = self.access_field_with_bound(field, (int_coords[0] + 1, int_coords[1]), bound_type)
+        top_right = self.access_field_with_bound(field, (int_coords[0], int_coords[1] + 1), bound_type)
         bottom_right = self.access_field_with_bound(field, (int_coords[0] + 1, int_coords[1] + 1), bound_type)
 
         ratio_down = curr_pos[0] - int_coords[0]
         ratio_right = curr_pos[1] - int_coords[1]
 
-        back = (1 - ratio_down) * (ratio_right * top_left + (1 - ratio_right) * top_right) + \
-               ratio_down * (ratio_right * bottom_left + (1 - ratio_right) * bottom_right)
+        back = (1 - ratio_down) * ((1 - ratio_right) * top_left + ratio_right * top_right) + (
+                ratio_down * ((1 - ratio_right) * bottom_left + ratio_right * bottom_right))
 
         return back
 
